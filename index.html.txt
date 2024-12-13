@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Währungsrechner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: url('https://images.unsplash.com/photo-1605559424305-9b7b74a87fd5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080') no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        #overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        #container {
+            margin: auto;
+            padding: 20px;
+            border: 2px solid #ff0000;
+            border-radius: 10px;
+            max-width: 400px;
+            background-color: rgba(17, 17, 17, 0.9);
+        }
+        input, button, select {
+            width: 90%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ff0000;
+            border-radius: 5px;
+        }
+        input, select {
+            background-color: #333;
+            color: #fff;
+        }
+        button {
+            background-color: #ff0000;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #cc0000;
+        }
+        #result {
+            margin-top: 20px;
+        }
+        #chart-container {
+            margin-top: 20px;
+        }
+        #banner {
+            background-color: #222;
+            color: #fff;
+            padding: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        #banner p {
+            display: inline-block;
+            animation: scrollBanner 20s linear infinite;
+        }
+        @keyframes scrollBanner {
+            from { transform: translateX(100%); }
+            to { transform: translateX(-100%); }
+        }
+        #musicToggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: url('https://img.icons8.com/ios-filled/50/ffffff/musical-notes.png') center no-repeat;
+            background-size: 30px;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid #ff0000;
+        }
+        #musicToggle.off {
+            background: url('https://img.icons8.com/ios-filled/50/ffffff/no-audio.png') center no-repeat;
+            background-size: 30px;
+        }
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        footer a {
+            color: #ff0000;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        #subtitle {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: -10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay"></div>
+    <div id="musicToggle" class="off" onclick="toggleMusic()"></div>
+
+    <div id="banner">
+        <p id="importantCurrencies">Wichtige Wechselkurse: Lade...</p>
+    </div>
+
+    <div id="container">
+        <h1>Währungsrechner</h1>
+        <p id="subtitle">By Pati</p>
+        <select id="baseCurrency">
+            <option value="CHF" selected>🇨🇭 CHF - Schweizer Franken</option>
+            <option value="EUR">🇪🇺 EUR - Euro</option>
+            <option value="USD">🇺🇸 USD - US-Dollar</option>
+            <option value="GBP">🇬🇧 GBP - Britisches Pfund</option>
+            <option value="HUF">🇭🇺 HUF - Ungarischer Forint</option>
+        </select>
+        <select id="targetCurrency">
+            <option value="EUR" selected>🇪🇺 EUR - Euro</option>
+            <option value="CHF">🇨🇭 CHF - Schweizer Franken</option>
+            <option value="USD">🇺🇸 USD - US-Dollar</option>
+            <option value="GBP">🇬🇧 GBP - Britisches Pfund</option>
+            <option value="HUF">🇭🇺 HUF - Ungarischer Forint</option>
+        </select>
+        <input type="number" id="amount" placeholder="Betrag eingeben" />
+        <button onclick="convert()">Umrechnen</button>
+        <p id="currentRate">Aktueller Kurs: -</p>
+        <p id="result">Bitte gib einen gültigen Betrag ein</p>
+    </div>
+
+    <div id="chart-container">
+        <canvas id="rateChart" width="400" height="200"></canvas>
+    </div>
+
+    <audio id="backgroundMusic" loop>
+        <source src="https://orf-live.ors-shoutcast.at/oe3-q2a" type="audio/mpeg">
+        Ihr Browser unterstützt kein Audio.
+    </audio>
+
+    <footer>
+        <p>Powered by <a href="#">Pati</a></p>
+    </footer>
+
+    <script>
+        const music = document.getElementById('backgroundMusic');
+        const musicToggle = document.getElementById('musicToggle');
+        const banner = document.getElementById('importantCurrencies');
+
+        function toggleMusic() {
+            if (music.paused) {
+                music.play();
+                musicToggle.classList.remove('off');
+            } else {
+                music.pause();
+                musicToggle.classList.add('off');
+            }
+        }
+
+        async function updateBanner() {
+            try {
+                const response = await fetch(`https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,CHF`);
+                const data = await response.json();
+                const rates = Object.entries(data.rates)
+                    .map(([currency, rate]) => `${currency}: ${rate.toFixed(4)}`)
+                    .join(' | ');
+                banner.textContent = `Wichtige Wechselkurse: ${rates}`;
+            } catch (error) {
+                banner.textContent = "Fehler beim Laden der Wechselkurse.";
+            }
+        }
+
+        async function convert() {
+            const baseCurrency = document.getElementById('baseCurrency').value;
+            const targetCurrency = document.getElementById('targetCurrency').value;
+            const amount = document.getElementById('amount').value;
+            const resultField = document.getElementById('result');
+            const currentRateField = document.getElementById('currentRate');
+
+            if (!amount || amount <= 0) {
+                resultField.textContent = "Bitte gib einen gültigen Betrag ein.";
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://api.frankfurter.app/latest?from=${baseCurrency}&to=${targetCurrency}`);
+                const data = await response.json();
+                const rate = data.rates[targetCurrency];
+                const convertedAmount = (amount * rate).toFixed(2);
+
+                resultField.textContent = `${amount} ${baseCurrency} = ${convertedAmount} ${targetCurrency}`;
+                currentRateField.textContent = `Aktueller Kurs: 1 ${baseCurrency} = ${rate.toFixed(4)} ${targetCurrency}`;
+            } catch (error) {
+                resultField.textContent = "Fehler beim Abrufen des Wechselkurses.";
+            }
+        }
+
+        async function plotChart() {
+            try {
+                const baseCurrency = document.getElementById('baseCurrency').value;
+                const targetCurrency = document.getElementById('targetCurrency').value;
+                const response = await fetch(`https://api.frankfurter.app/2024-11-01..2024-12-01?from=${baseCurrency}&to=${targetCurrency}`);
+                const data = await response.json();
+                const dates = Object.keys(data.rates);
+                const rates = dates.map(date => data.rates[date][targetCurrency]);
+
+                const ctx = document.getElementById('rateChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [{
+                            label: `${baseCurrency} zu ${targetCurrency} (letzter Monat)`,
+                            data: rates,
+                            borderColor: 'red',
+                            backgroundColor: 'rgba(255, 0, 0, 0.2)',
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#fff' } },
+                            y: { ticks: { color: '#fff' } }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Fehler beim Laden des Diagramms:", error);
+            }
+        }
+
+        updateBanner();
+        plotChart();
+    </script>
+</body>
+</html>
